@@ -263,7 +263,6 @@ class GptSoVits(nn.Module):
             verbose=False
         )
 
-
 class SSLModel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -271,6 +270,22 @@ class SSLModel(nn.Module):
 
     def forward(self, ref_audio_16k):
         return self.ssl.model(ref_audio_16k)["last_hidden_state"].transpose(1, 2)
+
+    def export(self, ref_audio_16k, project_name):
+            self.ssl.model.eval()
+            torch.onnx.export(
+                self,
+                (ref_audio_16k),
+                f"onnx/{project_name}/{project_name}_cnhubert.onnx",
+                input_names=["ref_audio_16k"],
+                output_names=["last_hidden_state"],
+                dynamic_axes={
+                    "ref_audio_16k": {1 : "text_length"},
+                    "last_hidden_state": {2 : "pred_length"}
+                },
+                opset_version=17,
+                verbose=False
+            )
 
 
 def export(vits_path, gpt_path, project_name, vits_model="v2"):
@@ -307,6 +322,7 @@ def export(vits_path, gpt_path, project_name, vits_model="v2"):
         a = gpt_sovits(ref_seq, text_seq, ref_bert, text_bert, ref_audio_sr, ssl_content).detach().cpu().numpy()
         soundfile.write("out.wav", a, vits.hps.data.sampling_rate)
 
+    ssl.export(ref_audio_16k, project_name)
     if vits_model == "v1":
         symbols = symbols_v1
     else:
@@ -336,8 +352,8 @@ if __name__ == "__main__":
     except:
         pass
 
-    gpt_path = "GPT_weights/nahida-e25.ckpt"
-    vits_path = "SoVITS_weights/nahida_e30_s3930.pth"
+    gpt_path = "GPT_SoVITS/pretrained_models/s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"
+    vits_path = "GPT_SoVITS/pretrained_models/s2G488k.pth"
     exp_path = "nahida"
     export(vits_path, gpt_path, exp_path)
 
